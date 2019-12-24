@@ -148,37 +148,36 @@ Node *EditorSceneImporterAssimp::import_scene(const String &p_path, uint32_t p_f
 	FileAccess *f = FileAccess::open(p_path, FileAccess::READ, &err);
 	ERR_FAIL_COND_V(!f, NULL);
 
+	PoolByteArray data;
 	// broadphase tokenizing pass in which we identify the core
 	// syntax elements of FBX (brackets, commas, key:value mappings)
 	Assimp::FBX::TokenList tokens;
-	try {
 
-		bool is_binary = true;
-		//        if (!strncmp(begin, "Kaydara FBX Binary", 18)) {
-		uint8_t *ptr = NULL;
-		int length = f->get_len();
-		f->get_buffer(ptr, length);
-
-		if (ptr != NULL) {
-			Assimp::FBX::TokenizeBinary(tokens, (const char *)ptr, (size_t)length);
-			//        } else {
-			//            Tokenize(tokens, begin);
-			//        }
-
-			// use this information to construct a very rudimentary
-			// parse-tree representing the FBX scope structure
-			Assimp::FBX::Parser parser(tokens, is_binary);
-			Assimp::FBX::ImportSettings settings;
-			// take the raw parse-tree and convert it to a FBX DOM
-			Assimp::FBX::Document doc(parser, settings);
-
-			std::for_each(tokens.begin(), tokens.end(), Assimp::FBX::Util::delete_fun<Assimp::FBX::Token>());
-		}
-	} catch (std::exception &e) {
-		std::cerr << "exception " << e.what() << std::endl;
-		std::for_each(tokens.begin(), tokens.end(), Assimp::FBX::Util::delete_fun<Assimp::FBX::Token>());
-		throw;
+	bool is_binary = false;
+	int length = f->get_len();
+	data.resize(length);
+	if (data.size() < 18) {
+		return NULL;
 	}
+	f->get_buffer(data.write().ptr(), data.size());
+	PoolByteArray fbx_header;
+	fbx_header.resize(18);
+	for (int32_t byte_i = 0; byte_i < 18; byte_i++) {
+		fbx_header.write()[byte_i] = data.read()[byte_i];
+	}
+	String fbx_header_string = String((const char *)fbx_header.read().ptr());
+	if (fbx_header_string == String("Kaydara FBX Binary")) {
+		is_binary = true;
+	}
+
+	Assimp::FBX::TokenizeBinary(tokens, (const char *)data.write().ptr(), (size_t)data.size());
+
+	// use this information to construct a very rudimentary
+	// parse-tree representing the FBX scope structure
+	Assimp::FBX::Parser parser(tokens, is_binary);
+	Assimp::FBX::ImportSettings settings;
+	// take the raw parse-tree and convert it to a FBX DOM
+	Assimp::FBX::Document doc(parser, settings);
 
 	//
 	// OLD
