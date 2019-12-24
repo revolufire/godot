@@ -167,14 +167,16 @@ Node *EditorSceneImporterAssimp::import_scene(const String &p_path, uint32_t p_f
 	String fbx_header_string = String((const char *)fbx_header.read().ptr());
 	if (fbx_header_string == String("Kaydara FBX Binary")) {
 		is_binary = true;
+		Assimp::FBX::TokenizeBinary(tokens, (const char *)data.write().ptr(), (size_t)data.size());
+	} else {
+		Assimp::FBX::Tokenize(tokens, (const char *)data.write().ptr());
 	}
-
-	Assimp::FBX::TokenizeBinary(tokens, (const char *)data.write().ptr(), (size_t)data.size());
 
 	// use this information to construct a very rudimentary
 	// parse-tree representing the FBX scope structure
 	Assimp::FBX::Parser parser(tokens, is_binary);
 	Assimp::FBX::ImportSettings settings;
+	settings.strictMode = false;
 	// take the raw parse-tree and convert it to a FBX DOM
 	Assimp::FBX::Document doc(parser, settings);
 
