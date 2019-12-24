@@ -1113,7 +1113,8 @@ EditorSceneImporterAssimp::_generate_mesh_from_surface_indices(ImportState &stat
 					weights.write[k] = bone_info[k].weight;
 				}
 				//std::cout << "bone count: " << bones.size() << ", weight count: " << weights.size() << std::endl;
-				st->set_weight_count(bone_influence_count > 4 ? 8 : 4);
+				//TODO 8 weights
+				//st->set_weight_count(bone_influence_count > 4 ? 8 : 4);
 				st->add_bones(bones);
 				st->add_weights(weights);
 			}
@@ -1443,9 +1444,10 @@ EditorSceneImporterAssimp::_generate_mesh_from_surface_indices(ImportState &stat
 		}
 
 		VisualServer::ArrayFormat format_flags = (VisualServer::ArrayFormat)0;
-		if (bone_influence_count > 4) {
-			format_flags = VisualServer::ARRAY_FLAG_USE_8_WEIGHTS;
-		}
+		//TODO 8 weights
+		// if (bone_influence_count > 4) {
+		// 	format_flags = VisualServer::ARRAY_FLAG_USE_8_WEIGHTS;
+		// }
 
 		mesh->add_surface_from_arrays(primitive, array_mesh, morphs, format_flags);
 		if (mat.is_valid()) {
