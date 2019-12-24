@@ -53,6 +53,7 @@
 #include <assimp/Logger.hpp>
 
 #include <map>
+#include <thirdparty/assimp/code/FBX/FBXDocument.h>
 
 #include "import_state.h"
 #include "import_utils.h"
@@ -105,7 +106,12 @@ private:
 	// non recursive - linear so must not use recursive arguments
 	MeshInstance *create_mesh(ImportState &state, const aiNode *assimp_node, const String &node_name, Node *active_node, Transform node_transform);
 	// recursive node generator
-	void _generate_node(ImportState &state, const aiNode *assimp_node);
+    void CacheNodeInformation(const Assimp::FBX::Document& doc, uint64_t id);
+
+/* Finds all bones and adds them to the bone_id_map if they don't already exist */
+    void FindAllBones(const Assimp::FBX::Model &model, int64_t parent_id);
+
+    void _generate_node(ImportState &state, const aiNode *assimp_node);
 	void _insert_animation_track(ImportState &scene, const aiAnimation *assimp_anim, int track_id,
 			int anim_fps, Ref<Animation> animation, float ticks_per_second,
 			Skeleton *skeleton, const NodePath &node_path,
@@ -114,7 +120,9 @@ private:
 	void _import_animation(ImportState &state, int p_animation_index, int p_bake_fps);
 	Node *get_node_by_name(ImportState &state, String name);
 	aiBone *get_bone_from_stack(ImportState &state, aiString name);
-	Spatial *_generate_scene(const String &p_path, aiScene *scene, const uint32_t p_flags, int p_bake_fps, const int32_t p_max_bone_weights);
+	Spatial *_generate_scene(const String &p_path, aiScene *scene, const Assimp::FBX::Document &p_document,
+                             const uint32_t p_flags,
+                             int p_bake_fps, const int32_t p_max_bone_weights);
 
 	template <class T>
 	T _interpolate_track(const Vector<float> &p_times, const Vector<T> &p_values, float p_time, AssetImportAnimation::Interpolation p_interp);
@@ -125,6 +133,9 @@ private:
 		bool is_default;
 	};
 
+	// assimp data ported
+    std::map<uint64_t, aiMatrix4x4> bind_matricies;
+    std::map<int64_t, const Assimp::FBX::LimbNode*> bone_id_map;
 protected:
 	static void _bind_methods();
 

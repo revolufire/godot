@@ -55,6 +55,7 @@
 #include <code/FBX/FBXUtil.h>
 #include <iostream>
 #include <string>
+#include <thirdparty/assimp/code/FBX/FBXMeshGeometry.h>
 
 // move into assimp
 aiBone *get_bone_by_name(const aiScene *scene, aiString bone_name) {
@@ -180,42 +181,45 @@ Node *EditorSceneImporterAssimp::import_scene(const String &p_path, uint32_t p_f
 	// take the raw parse-tree and convert it to a FBX DOM
 	Assimp::FBX::Document doc(parser, settings);
 
-	//
-	// OLD
-	//
 
-	Assimp::Importer importer;
-	std::wstring w_path = ProjectSettings::get_singleton()->globalize_path(p_path).c_str();
-	std::string s_path(w_path.begin(), w_path.end());
-	importer.SetPropertyBool(AI_CONFIG_PP_FD_REMOVE, true);
-	// Cannot remove pivot points because the static mesh will be in the wrong place
-	importer.SetPropertyBool(AI_CONFIG_IMPORT_FBX_PRESERVE_PIVOTS, false);
-	importer.SetPropertyBool(AI_CONFIG_PP_LBW_MAX_WEIGHTS, 8);
 
-	importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_LINE | aiPrimitiveType_POINT);
+	// //
+	// // OLD
+	// //
 
-	//importer.SetPropertyFloat(AI_CONFIG_PP_DB_THRESHOLD, 1.0f);
-	int64_t post_process_Steps = aiProcess_CalcTangentSpace |
-								 // imports models and listens to their file scale for CM to M conversions
-								 aiProcess_GlobalScale |
-								 // very important for culling so that it is done in the correct order.
-								 aiProcess_FlipWindingOrder |
-								 aiProcess_ImproveCacheLocality |
-								 aiProcess_Triangulate |
-								 aiProcess_GenUVCoords |
-								 aiProcess_TransformUVCoords |
-								 aiProcess_FindInstances |
-								 aiProcess_OptimizeMeshes |
-								 aiProcess_PopulateArmatureData |
-								 aiProcess_NormalizeWeights |
-								 0;
+	 Assimp::Importer importer;
+	 std::wstring w_path = ProjectSettings::get_singleton()->globalize_path(p_path).c_str();
+	 std::string s_path(w_path.begin(), w_path.end());
+	 importer.SetPropertyBool(AI_CONFIG_PP_FD_REMOVE, true);
+	 // Cannot remove pivot points because the static mesh will be in the wrong place
+	 importer.SetPropertyBool(AI_CONFIG_IMPORT_FBX_PRESERVE_PIVOTS, false);
+	 importer.SetPropertyBool(AI_CONFIG_PP_LBW_MAX_WEIGHTS, 8);
 
-	aiScene *scene = (aiScene *)importer.ReadFile(s_path.c_str(), post_process_Steps);
+	 importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_LINE | aiPrimitiveType_POINT);
 
-	ERR_FAIL_COND_V_MSG(scene == NULL, NULL,
-			String("Open Asset Import failed to open: ") + String(importer.GetErrorString()));
+	 //importer.SetPropertyFloat(AI_CONFIG_PP_DB_THRESHOLD, 1.0f);
+	 int64_t post_process_Steps = aiProcess_CalcTangentSpace |
+	 							 // imports models and listens to their file scale for CM to M conversions
+	 							 aiProcess_GlobalScale |
+	 							 // very important for culling so that it is done in the correct order.
+	 							 aiProcess_FlipWindingOrder |
+	 							 aiProcess_ImproveCacheLocality |
+	 							 aiProcess_Triangulate |
+	 							 aiProcess_GenUVCoords |
+	 							 aiProcess_TransformUVCoords |
+	 							 aiProcess_FindInstances |
+	 							 aiProcess_OptimizeMeshes |
+	 							 aiProcess_PopulateArmatureData |
+	 							 aiProcess_NormalizeWeights |
+	 							 0;
 
-	return _generate_scene(p_path, scene, p_flags, p_bake_fps, 8);
+	 aiScene *scene = (aiScene *)importer.ReadFile(s_path.c_str(), post_process_Steps);
+
+	 ERR_FAIL_COND_V_MSG(scene == NULL, NULL,
+	 		String("Open Asset Import failed to open: ") + String(importer.GetErrorString()));
+
+
+    return _generate_scene(p_path, scene, doc, p_flags, p_bake_fps, 8);
 }
 
 template <class T>
@@ -363,10 +367,19 @@ aiBone *EditorSceneImporterAssimp::get_bone_from_stack(ImportState &state, aiStr
 }
 
 Spatial *
-EditorSceneImporterAssimp::_generate_scene(const String &p_path, aiScene *scene, const uint32_t p_flags,
-		int p_bake_fps,
-		const int32_t p_max_bone_weights) {
-	ERR_FAIL_COND_V(scene == NULL, NULL);
+EditorSceneImporterAssimp::_generate_scene(const String &p_path, aiScene *scene,
+                                           const Assimp::FBX::Document &p_document, const uint32_t p_flags,
+                                           int p_bake_fps, const int32_t p_max_bone_weights) {
+
+
+    // cache basic node information from FBX document
+    CacheNodeInformation(p_document, 0L);
+
+
+
+
+
+    ERR_FAIL_COND_V(scene == NULL, NULL);
 
 	ImportState state;
 	state.path = p_path;
@@ -1670,4 +1683,73 @@ void EditorSceneImporterAssimp::_generate_node(
 	for (size_t i = 0; i < assimp_node->mNumChildren; i++) {
 		_generate_node(state, assimp_node->mChildren[i]);
 	}
+}
+
+void EditorSceneImporterAssimp::FindAllBones(const Assimp::FBX::Model &model, int64_t parent_id) {
+    //int count = 0;
+    const std::vector<const Assimp::FBX::NodeAttribute *> &node_attrs = model.GetAttributes();
+    for (const Assimp::FBX::NodeAttribute *attr : node_attrs) {
+        // this is the inverse bind matrix container (so where the pivot xform is stored)
+        const Assimp::FBX::LimbNode *const limb = dynamic_cast<const Assimp::FBX::LimbNode *>(attr);
+        if (limb) {
+            int64_t id = model.ID();
+            if (bone_id_map.count(id) == 0) {
+                bone_id_map.insert(std::pair<int64_t, const Assimp::FBX::LimbNode *>(id, limb));
+            }
+        }
+    }
+}
+
+void EditorSceneImporterAssimp::CacheNodeInformation(const Assimp::FBX::Document& doc, uint64_t id) {
+    const std::vector<const Assimp::FBX::Connection *> &conns = doc.GetConnectionsByDestinationSequenced(id, "Model");
+
+    for (const Assimp::FBX::Connection *con : conns) {
+        // ignore object-property links
+        if (con->PropertyName().length()) {
+            // really important we document why this is ignored.
+            print_verbose("ignoring property link - no docs on why this is ignored");
+            continue;
+        }
+
+        // convert connection source object into Object base class
+        const Assimp::FBX::Object *const object = con->SourceObject();
+
+        if (nullptr == object) {
+            print_verbose("failed to convert source object for Model link");
+            continue;
+        }
+
+        // FBX Model::Cube, Model::Bone001, etc elements
+        // This detects if we can cast the object into this model structure.
+        const Assimp::FBX::Model *const model = dynamic_cast<const Assimp::FBX::Model *>(object);
+
+        if (nullptr != model) {
+            std::string node_name = model->Name();
+
+            // check if there will be any child nodes
+            //const std::vector<const Assimp::FBX::Connection *> &child_conns = doc.GetConnectionsByDestinationSequenced(model->ID(), "Model");
+
+            // recursion call - child nodes
+            CacheNodeInformation(doc, model->ID());
+
+            // Convert bone node attributes
+            FindAllBones(*model, id);
+
+            const std::vector<const Assimp::FBX::Geometry *> &geometry = model->GetGeometry();
+            for (const Assimp::FBX::Geometry *geo : geometry) {
+                Assimp::FBX::MeshGeometry const *mesh = dynamic_cast<const Assimp::FBX::MeshGeometry *>(geo);
+                if (mesh != nullptr) {
+                    const Assimp::FBX::Skin *skin = mesh->DeformerSkin();
+                    if (skin != nullptr) {
+                        for (auto trans : skin->Clusters()) {
+                            bind_matricies.insert(std::pair<uint64_t, aiMatrix4x4>(trans->TargetNode()->ID(),
+                                                                                   trans->TransformLink()));
+                        }
+                    }
+
+                    print_verbose("we have a mesh :D and potentially a skin!");
+                }
+            }
+        }
+    }
 }
