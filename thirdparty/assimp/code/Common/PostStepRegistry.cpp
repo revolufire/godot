@@ -51,215 +51,218 @@ corresponding preprocessor flag to selectively disable steps.
 #include "PostProcessing/ProcessHelper.h"
 
 #ifndef ASSIMP_BUILD_NO_CALCTANGENTS_PROCESS
-#   include "PostProcessing/CalcTangentsProcess.h"
+#include "PostProcessing/CalcTangentsProcess.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_JOINVERTICES_PROCESS
-#   include "PostProcessing/JoinVerticesProcess.h"
+#include "PostProcessing/JoinVerticesProcess.h"
 #endif
 #if !(defined ASSIMP_BUILD_NO_MAKELEFTHANDED_PROCESS && defined ASSIMP_BUILD_NO_FLIPUVS_PROCESS && defined ASSIMP_BUILD_NO_FLIPWINDINGORDER_PROCESS)
-#   include "PostProcessing/ConvertToLHProcess.h"
+#include "PostProcessing/ConvertToLHProcess.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_TRIANGULATE_PROCESS
-#   include "PostProcessing/TriangulateProcess.h"
+#include "PostProcessing/TriangulateProcess.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_DROPFACENORMALS_PROCESS
-#   include "PostProcessing/DropFaceNormalsProcess.h"
+#include "PostProcessing/DropFaceNormalsProcess.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_GENFACENORMALS_PROCESS
-#   include "PostProcessing/GenFaceNormalsProcess.h"
+#include "PostProcessing/GenFaceNormalsProcess.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_GENVERTEXNORMALS_PROCESS
-#   include "PostProcessing/GenVertexNormalsProcess.h"
+#include "PostProcessing/GenVertexNormalsProcess.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_REMOVEVC_PROCESS
-#   include "PostProcessing/RemoveVCProcess.h"
+#include "PostProcessing/RemoveVCProcess.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_SPLITLARGEMESHES_PROCESS
-#   include "PostProcessing/SplitLargeMeshes.h"
+#include "PostProcessing/SplitLargeMeshes.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_PRETRANSFORMVERTICES_PROCESS
-#   include "PostProcessing/PretransformVertices.h"
+#include "PostProcessing/PretransformVertices.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_LIMITBONEWEIGHTS_PROCESS
-#   include "PostProcessing/LimitBoneWeightsProcess.h"
+#include "PostProcessing/LimitBoneWeightsProcess.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_VALIDATEDS_PROCESS
-#   include "PostProcessing/ValidateDataStructure.h"
+#include "PostProcessing/ValidateDataStructure.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_IMPROVECACHELOCALITY_PROCESS
-#   include "PostProcessing/ImproveCacheLocality.h"
+#include "PostProcessing/ImproveCacheLocality.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_FIXINFACINGNORMALS_PROCESS
-#   include "PostProcessing/FixNormalsStep.h"
+#include "PostProcessing/FixNormalsStep.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_REMOVE_REDUNDANTMATERIALS_PROCESS
-#   include "PostProcessing/RemoveRedundantMaterials.h"
+#include "PostProcessing/RemoveRedundantMaterials.h"
 #endif
 #if (!defined ASSIMP_BUILD_NO_EMBEDTEXTURES_PROCESS)
-#   include "PostProcessing/EmbedTexturesProcess.h"
+#include "PostProcessing/EmbedTexturesProcess.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_FINDINVALIDDATA_PROCESS
-#   include "PostProcessing/FindInvalidDataProcess.h"
+#include "PostProcessing/FindInvalidDataProcess.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_FINDDEGENERATES_PROCESS
-#   include "PostProcessing/FindDegenerates.h"
+#include "PostProcessing/FindDegenerates.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_SORTBYPTYPE_PROCESS
-#   include "PostProcessing/SortByPTypeProcess.h"
+#include "PostProcessing/SortByPTypeProcess.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_GENUVCOORDS_PROCESS
-#   include "PostProcessing/ComputeUVMappingProcess.h"
+#include "PostProcessing/ComputeUVMappingProcess.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_TRANSFORMTEXCOORDS_PROCESS
-#   include "PostProcessing/TextureTransform.h"
+#include "PostProcessing/TextureTransform.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_FINDINSTANCES_PROCESS
-#   include "PostProcessing/FindInstancesProcess.h"
+#include "PostProcessing/FindInstancesProcess.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_OPTIMIZEMESHES_PROCESS
-#   include "PostProcessing/OptimizeMeshes.h"
+#include "PostProcessing/OptimizeMeshes.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_OPTIMIZEGRAPH_PROCESS
-#   include "PostProcessing/OptimizeGraph.h"
+#include "PostProcessing/OptimizeGraph.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_SPLITBYBONECOUNT_PROCESS
-#   include "Common/SplitByBoneCountProcess.h"
+#include "Common/SplitByBoneCountProcess.h"
 #endif
 #ifndef ASSIMP_BUILD_NO_DEBONE_PROCESS
-#   include "PostProcessing/DeboneProcess.h"
+#include "PostProcessing/DeboneProcess.h"
 #endif
 #if (!defined ASSIMP_BUILD_NO_GLOBALSCALE_PROCESS)
-#   include "PostProcessing/ScaleProcess.h"
+#include "PostProcessing/ScaleProcess.h"
 #endif
 #if (!defined ASSIMP_BUILD_NO_ARMATUREPOPULATE_PROCESS)
-#   include "PostProcessing/ArmaturePopulate.h"
+#include "PostProcessing/ArmaturePopulate.h"
 #endif
 #if (!defined ASSIMP_BUILD_NO_GENBOUNDINGBOXES_PROCESS)
-#   include "PostProcessing/GenBoundingBoxesProcess.h"
+#include "PostProcessing/GenBoundingBoxesProcess.h"
 #endif
-
-
+#if (!defined ASSIMP_BUILD_NO_NORMALIZE_WEIGHTS_PROCESS)
+#include "PostProcessing/NormalizeWeightsProcess.h"
+#endif
 
 namespace Assimp {
 
 // ------------------------------------------------------------------------------------------------
-void GetPostProcessingStepInstanceList(std::vector< BaseProcess* >& out)
-{
-    // ----------------------------------------------------------------------------
-    // Add an instance of each post processing step here in the order
-    // of sequence it is executed. Steps that are added here are not
-    // validated - as RegisterPPStep() does - all dependencies must be given.
-    // ----------------------------------------------------------------------------
-    out.reserve(31);
+void GetPostProcessingStepInstanceList(std::vector<BaseProcess *> &out) {
+	// ----------------------------------------------------------------------------
+	// Add an instance of each post processing step here in the order
+	// of sequence it is executed. Steps that are added here are not
+	// validated - as RegisterPPStep() does - all dependencies must be given.
+	// ----------------------------------------------------------------------------
+	out.reserve(32);
 #if (!defined ASSIMP_BUILD_NO_MAKELEFTHANDED_PROCESS)
-    out.push_back( new MakeLeftHandedProcess());
+	out.push_back(new MakeLeftHandedProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_FLIPUVS_PROCESS)
-    out.push_back( new FlipUVsProcess());
+	out.push_back(new FlipUVsProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_FLIPWINDINGORDER_PROCESS)
-    out.push_back( new FlipWindingOrderProcess());
+	out.push_back(new FlipWindingOrderProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_REMOVEVC_PROCESS)
-    out.push_back( new RemoveVCProcess());
+	out.push_back(new RemoveVCProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_REMOVE_REDUNDANTMATERIALS_PROCESS)
-    out.push_back( new RemoveRedundantMatsProcess());
+	out.push_back(new RemoveRedundantMatsProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_EMBEDTEXTURES_PROCESS)
-    out.push_back( new EmbedTexturesProcess());
+	out.push_back(new EmbedTexturesProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_FINDINSTANCES_PROCESS)
-    out.push_back( new FindInstancesProcess());
+	out.push_back(new FindInstancesProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_OPTIMIZEGRAPH_PROCESS)
-    out.push_back( new OptimizeGraphProcess());
+	out.push_back(new OptimizeGraphProcess());
 #endif
 #ifndef ASSIMP_BUILD_NO_GENUVCOORDS_PROCESS
-    out.push_back( new ComputeUVMappingProcess());
+	out.push_back(new ComputeUVMappingProcess());
 #endif
 #ifndef ASSIMP_BUILD_NO_TRANSFORMTEXCOORDS_PROCESS
-    out.push_back( new TextureTransformStep());
+	out.push_back(new TextureTransformStep());
 #endif
 #if (!defined ASSIMP_BUILD_NO_GLOBALSCALE_PROCESS)
-    out.push_back( new ScaleProcess());
+	out.push_back(new ScaleProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_ARMATUREPOPULATE_PROCESS)
-    out.push_back( new ArmaturePopulate());
+	out.push_back(new ArmaturePopulate());
 #endif
 #if (!defined ASSIMP_BUILD_NO_PRETRANSFORMVERTICES_PROCESS)
-    out.push_back( new PretransformVertices());
+	out.push_back(new PretransformVertices());
 #endif
 #if (!defined ASSIMP_BUILD_NO_TRIANGULATE_PROCESS)
-    out.push_back( new TriangulateProcess());
+	out.push_back(new TriangulateProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_FINDDEGENERATES_PROCESS)
-    //find degenerates should run after triangulation (to sort out small
-    //generated triangles) but before sort by p types (in case there are lines
-    //and points generated and inserted into a mesh)
-    out.push_back( new FindDegeneratesProcess());
+	//find degenerates should run after triangulation (to sort out small
+	//generated triangles) but before sort by p types (in case there are lines
+	//and points generated and inserted into a mesh)
+	out.push_back(new FindDegeneratesProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_SORTBYPTYPE_PROCESS)
-    out.push_back( new SortByPTypeProcess());
+	out.push_back(new SortByPTypeProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_FINDINVALIDDATA_PROCESS)
-    out.push_back( new FindInvalidDataProcess());
+	out.push_back(new FindInvalidDataProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_OPTIMIZEMESHES_PROCESS)
-    out.push_back( new OptimizeMeshesProcess());
+	out.push_back(new OptimizeMeshesProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_FIXINFACINGNORMALS_PROCESS)
-    out.push_back( new FixInfacingNormalsProcess());
+	out.push_back(new FixInfacingNormalsProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_SPLITBYBONECOUNT_PROCESS)
-    out.push_back( new SplitByBoneCountProcess());
+	out.push_back(new SplitByBoneCountProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_SPLITLARGEMESHES_PROCESS)
-    out.push_back( new SplitLargeMeshesProcess_Triangle());
+	out.push_back(new SplitLargeMeshesProcess_Triangle());
 #endif
 #if (!defined ASSIMP_BUILD_NO_GENFACENORMALS_PROCESS)
-    out.push_back( new DropFaceNormalsProcess());
+	out.push_back(new DropFaceNormalsProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_GENFACENORMALS_PROCESS)
-    out.push_back( new GenFaceNormalsProcess());
+	out.push_back(new GenFaceNormalsProcess());
 #endif
-    // .........................................................................
-    // DON'T change the order of these five ..
-    // XXX this is actually a design weakness that dates back to the time
-    // when Importer would maintain the postprocessing step list exclusively.
-    // Now that others access it too, we need a better solution.
-    out.push_back( new ComputeSpatialSortProcess());
-    // .........................................................................
+	// .........................................................................
+	// DON'T change the order of these five ..
+	// XXX this is actually a design weakness that dates back to the time
+	// when Importer would maintain the postprocessing step list exclusively.
+	// Now that others access it too, we need a better solution.
+	out.push_back(new ComputeSpatialSortProcess());
+	// .........................................................................
 
 #if (!defined ASSIMP_BUILD_NO_GENVERTEXNORMALS_PROCESS)
-    out.push_back( new GenVertexNormalsProcess());
+	out.push_back(new GenVertexNormalsProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_CALCTANGENTS_PROCESS)
-    out.push_back( new CalcTangentsProcess());
+	out.push_back(new CalcTangentsProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_JOINVERTICES_PROCESS)
-    out.push_back( new JoinVerticesProcess());
+	out.push_back(new JoinVerticesProcess());
 #endif
 
-    // .........................................................................
-    out.push_back( new DestroySpatialSortProcess());
-    // .........................................................................
+	// .........................................................................
+	out.push_back(new DestroySpatialSortProcess());
+	// .........................................................................
 
 #if (!defined ASSIMP_BUILD_NO_SPLITLARGEMESHES_PROCESS)
-    out.push_back( new SplitLargeMeshesProcess_Vertex());
+	out.push_back(new SplitLargeMeshesProcess_Vertex());
 #endif
 #if (!defined ASSIMP_BUILD_NO_DEBONE_PROCESS)
-    out.push_back( new DeboneProcess());
+	out.push_back(new DeboneProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_LIMITBONEWEIGHTS_PROCESS)
-    out.push_back( new LimitBoneWeightsProcess());
+	out.push_back(new LimitBoneWeightsProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_IMPROVECACHELOCALITY_PROCESS)
-    out.push_back( new ImproveCacheLocalityProcess());
+	out.push_back(new ImproveCacheLocalityProcess());
+#endif
+#if (!defined ASSIMP_BUILD_NO_NORMALIZE_WEIGHTS_PROCESS)
+	out.push_back(new NormalizeWeightsProcess());
 #endif
 #if (!defined ASSIMP_BUILD_NO_GENBOUNDINGBOXES_PROCESS)
-    out.push_back(new GenBoundingBoxesProcess);
+	out.push_back(new GenBoundingBoxesProcess);
 #endif
 }
 
-}
+} // namespace Assimp

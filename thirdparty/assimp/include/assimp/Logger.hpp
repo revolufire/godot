@@ -216,7 +216,7 @@ protected:
 //  Default constructor
 inline
 Logger::Logger() AI_NO_EXCEPT
-: m_Severity(NORMAL) {
+: m_Severity(LogSeverity::VERBOSE) {
     // empty
 }
 

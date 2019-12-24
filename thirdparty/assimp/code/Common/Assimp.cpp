@@ -385,7 +385,7 @@ ASSIMP_API void aiAttachLogStream( const aiLogStream* stream )
     gActiveLogStreams[*stream] = lg;
 
     if (DefaultLogger::isNullLogger()) {
-        DefaultLogger::create(NULL,(gVerboseLogging == AI_TRUE ? Logger::VERBOSE : Logger::NORMAL));
+        DefaultLogger::create(NULL,Logger::VERBOSE);
     }
     DefaultLogger::get()->attachStream(lg);
     ASSIMP_END_EXCEPTION_REGION(void);

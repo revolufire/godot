@@ -40,63 +40,46 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------
 */
 
-/** @file  FBXImporter.h
- *  @brief Declaration of the FBX main importer class
+/** @file  FBXNoteAttribute.cpp
+ *  @brief Assimp::FBX::NodeAttribute (and subclasses) implementation
  */
-#ifndef INCLUDED_AI_FBX_IMPORTER_H
-#define INCLUDED_AI_FBX_IMPORTER_H
 
-#include <assimp/BaseImporter.h>
-#include <assimp/LogAux.h>
+#ifndef ASSIMP_BUILD_NO_FBX_IMPORTER
 
-#include "FBXImportSettings.h"
+#include "FBXParser.h"
+#include "FBXDocument.h"
+#include "FBXImporter.h"
+#include "FBXDocumentUtil.h"
+#include <iostream>
 
-namespace Assimp    {
+namespace Assimp {
+    namespace FBX {
 
-// TinyFormatter.h
-namespace Formatter {
-    template <typename T,typename TR, typename A> class basic_formatter;
-    typedef class basic_formatter< char, std::char_traits<char>, std::allocator<char> > format;
+        using namespace Util;
+
+// ------------------------------------------------------------------------------------------------
+        FbxPose::FbxPose(uint64_t id, const Element& element, const Document& doc, const std::string& name)
+                : Object(id,element,name)
+        {
+            const Scope& sc = GetRequiredScope(element);
+            std::cout << "pose name: " << name << std::endl;
+            for( auto element : sc.Elements())
+            {
+                std::cout << "pose element: " << element.first << std::endl;
+            }
+            const std::string& classname = ParseTokenAsString(GetRequiredToken(element,2));
+
+        }
+
+
+// ------------------------------------------------------------------------------------------------
+        FbxPose::~FbxPose()
+        {
+            // empty
+        }
+
+
+    }
 }
 
-// -------------------------------------------------------------------------------------------
-/** Load the Autodesk FBX file format.
-
- See http://en.wikipedia.org/wiki/FBX
-*/
-// -------------------------------------------------------------------------------------------
-class FBXImporter : public BaseImporter, public LogFunctions<FBXImporter>
-{
-public:
-    FBXImporter();
-    virtual ~FBXImporter();
-
-    // --------------------
-    bool CanRead( const std::string& pFile,
-        IOSystem* pIOHandler,
-        bool checkSig
-    ) const;
-
-    // --------------------
-    void InternReadFile( const std::string& pFile,
-                         aiScene* pScene,
-                         IOSystem* pIOHandler
-    );
-
-protected:
-
-    // --------------------
-    const aiImporterDesc* GetInfo () const;
-
-    // --------------------
-    void SetupProperties(const Importer* pImp);
-
-
-
-private:
-    FBX::ImportSettings settings;
-}; // !class FBXImporter
-
-} // end of namespace Assimp
-#endif // !INCLUDED_AI_FBX_IMPORTER_H
-
+#endif
