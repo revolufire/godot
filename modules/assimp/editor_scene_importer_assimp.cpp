@@ -154,8 +154,7 @@ Node *EditorSceneImporterAssimp::import_scene(const String &p_path, uint32_t p_f
 	Assimp::FBX::TokenList tokens;
 
 	bool is_binary = false;
-	int length = f->get_len();
-	data.resize(length);
+	data.resize(f->get_len());
 	if (data.size() < 18) {
 		return NULL;
 	}
