@@ -7,6 +7,7 @@ env_assimp = env_modules.Clone()
 env_assimp.Prepend(CPPPATH=['#thirdparty/assimp'])
 env_assimp.Prepend(CPPPATH=['#thirdparty/assimp/include'])
 env_assimp.Prepend(CPPPATH=['#thirdparty/assimp/code/Importer/IFC'])
+env_assimp.Prepend(CPPPATH=['#thirdparty/assimp/code/FBX'])
 env_assimp.Prepend(CPPPATH=['#thirdparty/misc'])
 env_assimp.Prepend(CPPPATH=['#thirdparty/assimp/code'])
 env_assimp.Prepend(CPPPATH=['#thirdparty/assimp/common'])
@@ -75,6 +76,7 @@ env_assimp.Append(CPPDEFINES=['ASSIMP_BUILD_SINGLETHREADED'])
 env_assimp.Append(CPPDEFINES=['ASSIMP_BUILD_NO_M3D_IMPORTER'])
 env_assimp.Append(CPPDEFINES=['ASSIMP_BUILD_NO_MMD_IMPORTER'])
 
+env_assimp.Append(CPPDEFINES=['ASSIMP_BUILD_SINGLETHREADED'])
 
 if(env['platform'] == 'windows'):
     env_assimp.Append(CPPDEFINES=['PLATFORM_WINDOWS'])

@@ -32,6 +32,7 @@
 #define EDITOR_SCENE_IMPORTER_ASSIMP_H
 
 #ifdef TOOLS_ENABLED
+
 #include "core/bind/core_bind.h"
 #include "core/io/resource_importer.h"
 #include "core/vector.h"
@@ -50,6 +51,7 @@
 #include <assimp/DefaultLogger.hpp>
 #include <assimp/LogStream.hpp>
 #include <assimp/Logger.hpp>
+
 #include <map>
 
 #include "import_state.h"
@@ -128,8 +130,8 @@ protected:
 
 public:
 	EditorSceneImporterAssimp() {
-		Assimp::DefaultLogger::create("", Assimp::Logger::VERBOSE);
-		unsigned int severity = Assimp::Logger::Info | Assimp::Logger::Err | Assimp::Logger::Warn;
+		Assimp::DefaultLogger::create("", Assimp::Logger::NORMAL);
+		unsigned int severity = Assimp::Logger::Info | Assimp::Logger::Err | Assimp::Logger::Warn | Assimp::Logger::Debugging;
 		Assimp::DefaultLogger::get()->attachStream(new AssimpStream(), severity);
 	}
 	~EditorSceneImporterAssimp() {
@@ -145,5 +147,6 @@ public:
 
 	void RegenerateBoneStack(ImportState &state, aiMesh *mesh);
 };
+
 #endif
 #endif

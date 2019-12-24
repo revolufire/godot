@@ -39,11 +39,21 @@
 #include "scene/resources/material.h"
 #include "scene/resources/surface_tool.h"
 
+#include <FBXDocument.h>
+#include <FBXParser.h>
+#include <FBXTokenizer.h>
+#include <FBXUtil.h>
+
 #include <assimp/matrix4x4.h>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 #include <assimp/Importer.hpp>
 #include <assimp/LogStream.hpp>
+
+#include <code/FBX/FBXDocument.h>
+#include <code/FBX/FBXImportSettings.h>
+#include <code/FBX/FBXUtil.h>
+#include <iostream>
 #include <string>
 
 // move into assimp
@@ -53,16 +63,42 @@ aiBone *get_bone_by_name(const aiScene *scene, aiString bone_name) {
 
 		// iterate over all the bones on the mesh for this node only!
 		for (unsigned int boneIndex = 0; boneIndex < mesh->mNumBones; boneIndex++) {
-
 			aiBone *bone = mesh->mBones[boneIndex];
+
 			if (bone->mName == bone_name) {
-				printf("matched bone by name: %s\n", bone->mName.C_Str());
+				//printf("matched bone by name: %s\n", bone->mName.C_Str());
 				return bone;
 			}
 		}
 	}
 
 	return NULL;
+}
+
+unsigned int max_bone_influences(const aiMesh *mesh) {
+	unsigned int vertex_influences_max = 0;
+	Map<uint32_t, List<float> > vertex_weight_list;
+
+	// iterate over all the bones on the mesh for this node only!
+	// FBX will NOT give you 4, or 8, do not expect it to.
+	for (unsigned int boneIndex = 0; boneIndex < mesh->mNumBones; boneIndex++) {
+		aiBone *bone = mesh->mBones[boneIndex];
+
+		for (size_t w = 0; w < bone->mNumWeights; w++) {
+			aiVertexWeight ai_weights = bone->mWeights[w];
+			uint32_t vertex_index = ai_weights.mVertexId;
+			vertex_weight_list[vertex_index].push_back(ai_weights.mWeight);
+		}
+	}
+
+	for (Map<uint32_t, List<float> >::Element *E = vertex_weight_list.front(); E; E = E->next()) {
+		unsigned int vertex_weight_count = E->value().size();
+		if (vertex_weight_count > vertex_influences_max) {
+			vertex_influences_max = vertex_weight_count;
+		}
+	}
+
+	return vertex_influences_max;
 }
 
 void EditorSceneImporterAssimp::get_extensions(List<String> *r_extensions) const {
@@ -82,8 +118,10 @@ void EditorSceneImporterAssimp::get_extensions(List<String> *r_extensions) const
 	}
 }
 
-void EditorSceneImporterAssimp::_register_project_setting_import(const String generic, const String import_setting_string,
-		const Vector<String> &exts, List<String> *r_extensions,
+void EditorSceneImporterAssimp::_register_project_setting_import(const String generic,
+		const String import_setting_string,
+		const Vector<String> &exts,
+		List<String> *r_extensions,
 		const bool p_enabled) const {
 	const String use_generic = "use_" + generic;
 	_GLOBAL_DEF(import_setting_string + use_generic, p_enabled, true);
@@ -101,57 +139,83 @@ uint32_t EditorSceneImporterAssimp::get_import_flags() const {
 void EditorSceneImporterAssimp::_bind_methods() {
 }
 
+void cupcakes(uint64_t id) {
+}
+
 Node *EditorSceneImporterAssimp::import_scene(const String &p_path, uint32_t p_flags, int p_bake_fps,
 		List<String> *r_missing_deps, Error *r_err) {
+	Error err;
+	FileAccess *f = FileAccess::open(p_path, FileAccess::READ, &err);
+	ERR_FAIL_COND_V(!f, NULL);
+
+	// broadphase tokenizing pass in which we identify the core
+	// syntax elements of FBX (brackets, commas, key:value mappings)
+	Assimp::FBX::TokenList tokens;
+	try {
+
+		bool is_binary = true;
+		//        if (!strncmp(begin, "Kaydara FBX Binary", 18)) {
+		uint8_t *ptr = NULL;
+		int length = f->get_len();
+		f->get_buffer(ptr, length);
+
+		if (ptr != NULL) {
+			Assimp::FBX::TokenizeBinary(tokens, (const char *)ptr, (size_t)length);
+			//        } else {
+			//            Tokenize(tokens, begin);
+			//        }
+
+			// use this information to construct a very rudimentary
+			// parse-tree representing the FBX scope structure
+			Assimp::FBX::Parser parser(tokens, is_binary);
+			Assimp::FBX::ImportSettings settings;
+			// take the raw parse-tree and convert it to a FBX DOM
+			Assimp::FBX::Document doc(parser, settings);
+
+			std::for_each(tokens.begin(), tokens.end(), Assimp::FBX::Util::delete_fun<Assimp::FBX::Token>());
+		}
+	} catch (std::exception &e) {
+		std::cerr << "exception " << e.what() << std::endl;
+		std::for_each(tokens.begin(), tokens.end(), Assimp::FBX::Util::delete_fun<Assimp::FBX::Token>());
+		throw;
+	}
+
+	//
+	// OLD
+	//
+
 	Assimp::Importer importer;
 	std::wstring w_path = ProjectSettings::get_singleton()->globalize_path(p_path).c_str();
 	std::string s_path(w_path.begin(), w_path.end());
 	importer.SetPropertyBool(AI_CONFIG_PP_FD_REMOVE, true);
 	// Cannot remove pivot points because the static mesh will be in the wrong place
 	importer.SetPropertyBool(AI_CONFIG_IMPORT_FBX_PRESERVE_PIVOTS, false);
-	int32_t max_bone_weights = 4;
-	//if (p_flags & IMPORT_ANIMATION_EIGHT_WEIGHTS) {
-	//	const int eight_bones = 8;
-	//	importer.SetPropertyBool(AI_CONFIG_PP_LBW_MAX_WEIGHTS, eight_bones);
-	//	max_bone_weights = eight_bones;
-	//}
+	importer.SetPropertyBool(AI_CONFIG_PP_LBW_MAX_WEIGHTS, 8);
 
 	importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_LINE | aiPrimitiveType_POINT);
 
 	//importer.SetPropertyFloat(AI_CONFIG_PP_DB_THRESHOLD, 1.0f);
-	int32_t post_process_Steps = aiProcess_CalcTangentSpace |
-								 aiProcess_GlobalScale |
+	int64_t post_process_Steps = aiProcess_CalcTangentSpace |
 								 // imports models and listens to their file scale for CM to M conversions
-								 //aiProcess_FlipUVs |
-								 aiProcess_FlipWindingOrder |
+								 aiProcess_GlobalScale |
 								 // very important for culling so that it is done in the correct order.
-								 //aiProcess_DropNormals |
-								 //aiProcess_GenSmoothNormals |
-								 //aiProcess_JoinIdenticalVertices |
+								 aiProcess_FlipWindingOrder |
 								 aiProcess_ImproveCacheLocality |
-								 //aiProcess_RemoveRedundantMaterials | // Causes a crash
-								 //aiProcess_SplitLargeMeshes |
 								 aiProcess_Triangulate |
 								 aiProcess_GenUVCoords |
-								 //aiProcess_FindDegenerates |
-								 //aiProcess_SortByPType |
-								 // aiProcess_FindInvalidData |
 								 aiProcess_TransformUVCoords |
 								 aiProcess_FindInstances |
-								 //aiProcess_FixInfacingNormals |
-								 //aiProcess_ValidateDataStructure |
 								 aiProcess_OptimizeMeshes |
 								 aiProcess_PopulateArmatureData |
-								 //aiProcess_OptimizeGraph |
-								 //aiProcess_Debone |
-								 // aiProcess_EmbedTextures |
-								 //aiProcess_SplitByBoneCount |
+								 aiProcess_NormalizeWeights |
 								 0;
+
 	aiScene *scene = (aiScene *)importer.ReadFile(s_path.c_str(), post_process_Steps);
 
-	ERR_FAIL_COND_V_MSG(scene == NULL, NULL, String("Open Asset Import failed to open: ") + String(importer.GetErrorString()));
+	ERR_FAIL_COND_V_MSG(scene == NULL, NULL,
+			String("Open Asset Import failed to open: ") + String(importer.GetErrorString()));
 
-	return _generate_scene(p_path, scene, p_flags, p_bake_fps, max_bone_weights);
+	return _generate_scene(p_path, scene, p_flags, p_bake_fps, 8);
 }
 
 template <class T>
@@ -299,7 +363,8 @@ aiBone *EditorSceneImporterAssimp::get_bone_from_stack(ImportState &state, aiStr
 }
 
 Spatial *
-EditorSceneImporterAssimp::_generate_scene(const String &p_path, aiScene *scene, const uint32_t p_flags, int p_bake_fps,
+EditorSceneImporterAssimp::_generate_scene(const String &p_path, aiScene *scene, const uint32_t p_flags,
+		int p_bake_fps,
 		const int32_t p_max_bone_weights) {
 	ERR_FAIL_COND_V(scene == NULL, NULL);
 
@@ -363,7 +428,9 @@ EditorSceneImporterAssimp::_generate_scene(const String &p_path, aiScene *scene,
 					state.armature_skeletons.insert(element_assimp_node, skeleton);
 				}
 			} else if (bone != NULL) {
-				continue;
+				continue; // skip bones
+			} else if (element_assimp_node->mNumMeshes > 0) {
+				spatial = memnew(Spatial);
 			} else {
 				spatial = memnew(Spatial);
 			}
@@ -391,28 +458,36 @@ EditorSceneImporterAssimp::_generate_scene(const String &p_path, aiScene *scene,
 				ERR_FAIL_COND_V_MSG(parent_node == NULL, state.root,
 						"Parent node invalid even though lookup successful, out of ram?")
 
-				if (spatial != state.root) {
+				if (parent_node && spatial != state.root) {
 					parent_node->add_child(spatial);
 					spatial->set_owner(state.root);
-				} else {
+				} else if (spatial == state.root) {
 					// required - think about it root never has a parent yet is valid, anything else without a parent is not valid.
+				} else // Safety for instances
+				{
+					WARN_PRINT(
+							"Failed to find parent node instance after lookup, serious warning report to godot with model");
+					memdelete(spatial); // this node is broken
 				}
 			} else if (spatial != state.root) {
 				// if the ainode is not in the tree
 				// parent it to the last good parent found
 				if (last_valid_parent) {
+					print_error("Had to use fallback parent for " + spatial->get_name());
 					last_valid_parent->add_child(spatial);
 					spatial->set_owner(state.root);
 				} else {
+					print_error("Deleted node: " + spatial->get_name());
 					// this is a serious error?
 					memdelete(spatial);
 				}
+			} else {
+				print_error("Executed no parenting for node: " + spatial->get_name());
 			}
 
 			// update last valid parent
 			last_valid_parent = spatial;
 		}
-		print_verbose("node counts: " + itos(state.nodes.size()));
 
 		// make clean bone stack
 		RegenerateBoneStack(state);
@@ -445,22 +520,27 @@ EditorSceneImporterAssimp::_generate_scene(const String &p_path, aiScene *scene,
 				WARN_PRINT("Untitled bone name detected... report with file please");
 			}
 
-			// todo: this is where skin support goes
 			if (skeleton && skeleton->find_bone(bone_name) == -1) {
-				print_verbose("[Godot Glue] Imported bone" + bone_name);
+				//print_verbose("[Godot Glue] Imported bone" + bone_name);
 				int boneIdx = skeleton->get_bone_count();
 
-				Transform pform = AssimpUtils::assimp_matrix_transform(bone->mNode->mTransformation);
 				skeleton->add_bone(bone_name);
-				skeleton->set_bone_rest(boneIdx, pform);
-				skeleton->set_bone_pose(boneIdx, pform);
+				skeleton->set_bone_rest(boneIdx,
+						AssimpUtils::assimp_matrix_transform(bone->mOffsetMatrix.Inverse()));
+				//skeleton->set_bone_pose(boneIdx, AssimpUtils::assimp_matrix_transform(bone->mOffsetMatrix.Inverse()));
 
+				// order of this is important
 				if (parent_node != NULL) {
-					int parent_bone_id = skeleton->find_bone(AssimpUtils::get_anim_string_from_assimp(parent_node->mName));
+					int parent_bone_id = skeleton->find_bone(
+							AssimpUtils::get_anim_string_from_assimp(parent_node->mName));
 					int current_bone_id = boneIdx;
 					skeleton->set_bone_parent(current_bone_id, parent_bone_id);
 				}
 			}
+		}
+
+		for (Map<const aiNode *, Skeleton *>::Element *skeleton_kvp = state.armature_skeletons.front(); skeleton_kvp; skeleton_kvp = skeleton_kvp->next()) {
+			skeleton_kvp->get()->localize_rests();
 		}
 
 		print_verbose("generating mesh phase from skeletal mesh");
@@ -470,11 +550,10 @@ EditorSceneImporterAssimp::_generate_scene(const String &p_path, aiScene *scene,
 		for (Map<const aiNode *, Spatial *>::Element *key_value_pair = state.flat_node_map.front(); key_value_pair; key_value_pair = key_value_pair->next()) {
 			const aiNode *assimp_node = key_value_pair->key();
 			Spatial *mesh_template = key_value_pair->value();
+			Node *parent_node = mesh_template->get_parent();
 
 			ERR_CONTINUE(assimp_node == NULL);
 			ERR_CONTINUE(mesh_template == NULL);
-
-			Node *parent_node = mesh_template->get_parent();
 
 			if (mesh_template == state.root) {
 				continue;
@@ -514,6 +593,7 @@ EditorSceneImporterAssimp::_generate_scene(const String &p_path, aiScene *scene,
 					// update mesh in list so that each mesh node is available
 					// this makes the template unavailable which is the desired behaviour
 					state.flat_node_map[assimp_node] = mesh;
+					mesh->set_owner(state.root);
 
 					cleanup_template_nodes.push_back(mesh_template);
 
@@ -537,6 +617,9 @@ EditorSceneImporterAssimp::_generate_scene(const String &p_path, aiScene *scene,
 		state.animation_player->set_owner(state.root);
 
 		for (uint32_t i = 0; i < scene->mNumAnimations; i++) {
+
+			// generate bone stack for animation import
+			RegenerateBoneStack(state);
 			_import_animation(state, i, p_bake_fps);
 		}
 	}
@@ -558,11 +641,30 @@ EditorSceneImporterAssimp::_generate_scene(const String &p_path, aiScene *scene,
 	return state.root;
 }
 
-void EditorSceneImporterAssimp::_insert_animation_track(ImportState &scene, const aiAnimation *assimp_anim, int track_id,
-		int anim_fps, Ref<Animation> animation, float ticks_per_second,
+void EditorSceneImporterAssimp::_insert_animation_track(
+		ImportState &scene,
+		const aiAnimation *assimp_anim,
+		int track_id,
+		int anim_fps,
+		Ref<Animation> animation,
+		float ticks_per_second,
 		Skeleton *skeleton, const NodePath &node_path,
 		const String &node_name, aiBone *track_bone) {
+
+	unsigned int track_identity = (unsigned int)track_id;
+	if (track_identity > assimp_anim->mNumChannels) {
+		print_error("Track ID cannot be greater than available channels");
+		return;
+	}
 	const aiNodeAnim *assimp_track = assimp_anim->mChannels[track_id];
+
+	if (!assimp_track) return;
+	if (assimp_track->mNodeName == aiString("")) return;
+
+	print_verbose(
+			"animation track insert: " + AssimpUtils::get_raw_string_from_assimp(assimp_track->mNodeName) + " " +
+			itos(track_id));
+
 	//make transform track
 	int track_idx = animation->get_track_count();
 	animation->add_track(Animation::TYPE_TRANSFORM);
@@ -581,22 +683,28 @@ void EditorSceneImporterAssimp::_insert_animation_track(ImportState &scene, cons
 	Vector<Quat> rot_values;
 	Vector<float> rot_times;
 
-	for (size_t p = 0; p < assimp_track->mNumPositionKeys; p++) {
-		aiVector3D pos = assimp_track->mPositionKeys[p].mValue;
-		pos_values.push_back(Vector3(pos.x, pos.y, pos.z));
-		pos_times.push_back(assimp_track->mPositionKeys[p].mTime / ticks_per_second);
+	if (assimp_track->mNumPositionKeys > 0) {
+		for (size_t p = 0; p < assimp_track->mNumPositionKeys; p++) {
+			aiVector3D pos = assimp_track->mPositionKeys[p].mValue;
+			pos_values.push_back(Vector3(pos.x, pos.y, pos.z));
+			pos_times.push_back(assimp_track->mPositionKeys[p].mTime / ticks_per_second);
+		}
 	}
 
-	for (size_t r = 0; r < assimp_track->mNumRotationKeys; r++) {
-		aiQuaternion quat = assimp_track->mRotationKeys[r].mValue;
-		rot_values.push_back(Quat(quat.x, quat.y, quat.z, quat.w).normalized());
-		rot_times.push_back(assimp_track->mRotationKeys[r].mTime / ticks_per_second);
+	if (assimp_track->mNumRotationKeys > 0) {
+		for (size_t r = 0; r < assimp_track->mNumRotationKeys; r++) {
+			aiQuaternion quat = assimp_track->mRotationKeys[r].mValue;
+			rot_values.push_back(Quat(quat.x, quat.y, quat.z, quat.w).normalized());
+			rot_times.push_back(assimp_track->mRotationKeys[r].mTime / ticks_per_second);
+		}
 	}
 
-	for (size_t sc = 0; sc < assimp_track->mNumScalingKeys; sc++) {
-		aiVector3D scale = assimp_track->mScalingKeys[sc].mValue;
-		scale_values.push_back(Vector3(scale.x, scale.y, scale.z));
-		scale_times.push_back(assimp_track->mScalingKeys[sc].mTime / ticks_per_second);
+	if (assimp_track->mNumScalingKeys > 0) {
+		for (size_t sc = 0; sc < assimp_track->mNumScalingKeys; sc++) {
+			aiVector3D scale = assimp_track->mScalingKeys[sc].mValue;
+			scale_values.push_back(Vector3(scale.x, scale.y, scale.z));
+			scale_times.push_back(assimp_track->mScalingKeys[sc].mTime / ticks_per_second);
+		}
 	}
 
 	while (true) {
@@ -605,36 +713,38 @@ void EditorSceneImporterAssimp::_insert_animation_track(ImportState &scene, cons
 		Vector3 scale(1, 1, 1);
 
 		if (pos_values.size()) {
+			// todo: test this works
 			pos = _interpolate_track<Vector3>(pos_times, pos_values, time, AssetImportAnimation::INTERP_LINEAR);
 		}
 
 		if (rot_values.size()) {
 			rot = _interpolate_track<Quat>(rot_times, rot_values, time,
-					AssetImportAnimation::INTERP_LINEAR)
-						  .normalized();
+					AssetImportAnimation::INTERP_LINEAR);
 		}
 
 		if (scale_values.size()) {
-			scale = _interpolate_track<Vector3>(scale_times, scale_values, time, AssetImportAnimation::INTERP_LINEAR);
+			scale = _interpolate_track<Vector3>(scale_times, scale_values, time,
+					AssetImportAnimation::INTERP_LINEAR);
 		}
 
 		if (skeleton) {
 			int skeleton_bone = skeleton->find_bone(node_name);
+			//print_verbose("Skeleton name: " + skeleton->get_name() + " bone id: " + itos(skeleton_bone));
 
 			if (skeleton_bone >= 0 && track_bone) {
 
 				Transform xform;
 				xform.basis.set_quat_scale(rot, scale);
 				xform.origin = pos;
-
-				xform = skeleton->get_bone_pose(skeleton_bone).inverse() * xform;
+				// this is the pivot transform
+				xform = skeleton->get_bone_rest(skeleton_bone).affine_inverse() * xform;
 
 				rot = xform.basis.get_rotation_quat();
 				rot.normalize();
 				scale = xform.basis.get_scale();
 				pos = xform.origin;
 			} else {
-				ERR_FAIL_MSG("Skeleton bone lookup failed for skeleton: " + skeleton->get_name());
+				//ERR_FAIL_MSG("Skeleton bone lookup failed for skeleton: " + skeleton->get_name());
 			}
 		}
 
@@ -732,14 +842,11 @@ void EditorSceneImporterAssimp::_import_animation(ImportState &state, int p_anim
 	animation->set_name(name);
 	animation->set_length(anim->mDuration / ticks_per_second);
 
-	// generate bone stack for animation import
-	RegenerateBoneStack(state);
-
 	//regular tracks
-	for (size_t i = 0; i < anim->mNumChannels; i++) {
-		const aiNodeAnim *track = anim->mChannels[i];
-		String node_name = AssimpUtils::get_assimp_string(track->mNodeName);
-		print_verbose("track name import: " + node_name);
+	for (size_t track_id = 0; track_id < anim->mNumChannels; ++track_id) {
+		const aiNodeAnim *track = anim->mChannels[track_id];
+		String node_name = AssimpUtils::get_anim_string_from_assimp(track->mNodeName);
+		print_verbose("animation node name: " + node_name);
 		if (track->mNumRotationKeys == 0 && track->mNumPositionKeys == 0 && track->mNumScalingKeys == 0) {
 			continue; //do not bother
 		}
@@ -763,7 +870,8 @@ void EditorSceneImporterAssimp::_import_animation(ImportState &state, int p_anim
 					node_path = path;
 
 					if (node_path != NodePath()) {
-						_insert_animation_track(state, anim, i, p_bake_fps, animation, ticks_per_second, skeleton,
+						_insert_animation_track(state, anim, track_id, p_bake_fps, animation, ticks_per_second,
+								skeleton,
 								node_path, node_name, bone);
 					} else {
 						print_error("Failed to find valid node path for animation");
@@ -775,16 +883,41 @@ void EditorSceneImporterAssimp::_import_animation(ImportState &state, int p_anim
 		// not a bone
 		// note this is flaky it uses node names which is unreliable
 		Node *allocated_node = get_node_by_name(state, node_name);
-		// todo: implement skeleton grabbing for node based animations too :)
 		// check if node exists, if it does then also apply animation track for node and bones above are all handled.
 		// this is now inclusive animation handling so that
 		// we import all the data and do not miss anything.
 		if (allocated_node) {
 			node_path = state.root->get_path_to(allocated_node);
+			//print_verbose("Import animation path: " + node_path);
+			//if(String(node_path).count("engine_pivot__Translation/upper engine_pivot__Rotation/upper engine_pivot__Scaling") > 0)
+			if (!allocated_node->get_owner()) {
+				print_error("Found problematic pivot node: " + allocated_node->get_name());
+				print_error("Problematic parent: " + allocated_node->get_parent()->get_name());
 
-			if (node_path != NodePath()) {
-				_insert_animation_track(state, anim, i, p_bake_fps, animation, ticks_per_second, skeleton,
-						node_path, node_name, nullptr);
+				// Fix broken pivot data
+				Node *iter = allocated_node;
+				unsigned int id = 0;
+				while (iter) {
+					//print_verbose("[" + itos(i) + "] Recursing to parent: " + iter->get_name());
+					if (iter != state.root) {
+						iter->set_owner(state.root);
+					}
+					iter = iter->get_parent();
+					id++;
+				}
+
+				if (node_path != NodePath()) {
+					_insert_animation_track(state, anim, track_id, p_bake_fps, animation, ticks_per_second,
+							skeleton,
+							node_path, node_name, nullptr);
+				}
+
+			} else {
+				if (node_path != NodePath()) {
+					_insert_animation_track(state, anim, track_id, p_bake_fps, animation, ticks_per_second,
+							skeleton,
+							node_path, node_name, nullptr);
+				}
 			}
 		}
 	}
@@ -833,11 +966,13 @@ void EditorSceneImporterAssimp::_import_animation(ImportState &state, int p_anim
 		state.animation_player->add_animation(name, animation);
 	}
 }
+
 //
 // Mesh Generation from indices ? why do we need so much mesh code
 // [debt needs looked into]
 Ref<Mesh>
-EditorSceneImporterAssimp::_generate_mesh_from_surface_indices(ImportState &state, const Vector<int> &p_surface_indices,
+EditorSceneImporterAssimp::_generate_mesh_from_surface_indices(ImportState &state,
+		const Vector<int> &p_surface_indices,
 		const aiNode *assimp_node, Ref<Skin> &skin,
 		Skeleton *&skeleton_assigned) {
 
@@ -850,16 +985,16 @@ EditorSceneImporterAssimp::_generate_mesh_from_surface_indices(ImportState &stat
 	for (int i = 0; i < p_surface_indices.size(); i++) {
 		const unsigned int mesh_idx = p_surface_indices[0];
 		const aiMesh *ai_mesh = state.assimp_scene->mMeshes[mesh_idx];
+
+		mesh->set_blend_shape_mode(Mesh::BLEND_SHAPE_MODE_NORMALIZED);
+
 		for (size_t j = 0; j < ai_mesh->mNumAnimMeshes; j++) {
 			String ai_anim_mesh_name = AssimpUtils::get_assimp_string(ai_mesh->mAnimMeshes[j]->mName);
-			if (!morph_mesh_string_lookup.has(ai_anim_mesh_name)) {
-				morph_mesh_string_lookup.insert(ai_anim_mesh_name, j);
-				mesh->set_blend_shape_mode(Mesh::BLEND_SHAPE_MODE_NORMALIZED);
-				if (ai_anim_mesh_name.empty()) {
-					ai_anim_mesh_name = String("morph_") + itos(j);
-				}
-				mesh->add_blend_shape(ai_anim_mesh_name);
+
+			if (ai_anim_mesh_name.empty()) {
+				ai_anim_mesh_name = String("morph_") + itos(j);
 			}
+			mesh->add_blend_shape(ai_anim_mesh_name + itos(j));
 		}
 	}
 	//
@@ -889,7 +1024,7 @@ EditorSceneImporterAssimp::_generate_mesh_from_surface_indices(ImportState &stat
 				//                skeleton_assigned =
 				String bone_name = AssimpUtils::get_assimp_string(bone->mName);
 				int bone_index = skeleton_assigned->find_bone(bone_name);
-				ERR_CONTINUE(bone_index == -1);
+				ERR_CONTINUE_MSG(bone_index == -1, "Bone index invalid for bone: " + bone_name);
 				for (size_t w = 0; w < bone->mNumWeights; w++) {
 
 					aiVertexWeight ai_weights = bone->mWeights[w];
@@ -912,9 +1047,21 @@ EditorSceneImporterAssimp::_generate_mesh_from_surface_indices(ImportState &stat
 		// Create mesh from data from assimp
 		//
 
+		unsigned int bone_influence_count = max_bone_influences(ai_mesh);
+
 		Ref<SurfaceTool> st;
 		st.instance();
 		st->begin(Mesh::PRIMITIVE_TRIANGLES);
+		if (bone_influence_count <= 4) {
+			print_verbose("Using 4 bone weights");
+		} else {
+			print_verbose("Using 8 bone weights");
+		}
+
+		// simple sanity check, we will truncate regardless later on.
+		if (bone_influence_count > 8) {
+			print_error("Exceeded vertex weight count supported, report to modeller!");
+		}
 
 		for (size_t j = 0; j < ai_mesh->mNumVertices; j++) {
 
@@ -960,12 +1107,13 @@ EditorSceneImporterAssimp::_generate_mesh_from_surface_indices(ImportState &stat
 				Vector<float> weights;
 				weights.resize(bone_info.size());
 
-				// todo? do we really need to loop over all bones? - assimp may have helper to find all influences on this vertex.
 				for (int k = 0; k < bone_info.size(); k++) {
+					//std::cout << "bone write index: " << k << " bone count: " << bone_info.size() << std::endl;
 					bones.write[k] = bone_info[k].bone;
 					weights.write[k] = bone_info[k].weight;
 				}
-
+				//std::cout << "bone count: " << bones.size() << ", weight count: " << weights.size() << std::endl;
+				st->set_weight_count(bone_influence_count > 4 ? 8 : 4);
 				st->add_bones(bones);
 				st->add_weights(weights);
 			}
@@ -1003,6 +1151,7 @@ EditorSceneImporterAssimp::_generate_mesh_from_surface_indices(ImportState &stat
 			}
 		}
 
+		const String mesh_name = AssimpUtils::get_assimp_string(ai_mesh->mName);
 		aiString mat_name;
 		if (AI_SUCCESS == ai_material->Get(AI_MATKEY_NAME, mat_name)) {
 			mat->set_name(AssimpUtils::get_assimp_string(mat_name));
@@ -1157,7 +1306,8 @@ EditorSceneImporterAssimp::_generate_mesh_from_surface_indices(ImportState &stat
 				aiString texture_emissive_path;
 				if (AI_SUCCESS ==
 						ai_material->Get(AI_MATKEY_FBX_MAYA_EMISSION_TEXTURE, AI_PROPERTIES, texture_emissive_path)) {
-					if (AssimpUtils::CreateAssimpTexture(state, texture_emissive_path, filename, path, image_data)) {
+					if (AssimpUtils::CreateAssimpTexture(state, texture_emissive_path, filename, path,
+								image_data)) {
 						mat->set_feature(SpatialMaterial::FEATURE_EMISSION, true);
 						mat->set_texture(SpatialMaterial::TEXTURE_EMISSION, image_data.texture);
 					}
@@ -1289,21 +1439,30 @@ EditorSceneImporterAssimp::_generate_mesh_from_surface_indices(ImportState &stat
 				array_copy[VisualServer::ARRAY_TANGENT] = new_tangents;
 			}
 
-			morphs[j] = array_copy;
+			morphs.push_back(array_copy);
 		}
-		mesh->add_surface_from_arrays(primitive, array_mesh, morphs);
-		mesh->surface_set_material(i, mat);
-		mesh->surface_set_name(i, AssimpUtils::get_assimp_string(ai_mesh->mName));
+
+		VisualServer::ArrayFormat format_flags = (VisualServer::ArrayFormat)0;
+		if (bone_influence_count > 4) {
+			format_flags = VisualServer::ARRAY_FLAG_USE_8_WEIGHTS;
+		}
+
+		mesh->add_surface_from_arrays(primitive, array_mesh, morphs, format_flags);
+		if (mat.is_valid()) {
+			mesh->surface_set_material(i, mat);
+			mesh->surface_set_name(i, AssimpUtils::get_assimp_string(ai_mesh->mName));
+		}
 	}
 
 	return mesh;
 }
 
 /**
- * Create a new mesh for the node supplied
- */
+* Create a new mesh for the node supplied
+*/
 MeshInstance *
-EditorSceneImporterAssimp::create_mesh(ImportState &state, const aiNode *assimp_node, const String &node_name, Node *active_node, Transform node_transform) {
+EditorSceneImporterAssimp::create_mesh(ImportState &state, const aiNode *assimp_node, const String &node_name,
+		Node *active_node, Transform node_transform) {
 	/* MESH NODE */
 	Ref<Mesh> mesh;
 	Ref<Skin> skin;
@@ -1359,16 +1518,16 @@ EditorSceneImporterAssimp::create_mesh(ImportState &state, const aiNode *assimp_
 				if (!armature) {
 					print_verbose("Configured mesh armature, will reparent later to armature");
 					armature = iterBone->mArmature;
+					ERR_CONTINUE_MSG(armature == nullptr, "Armature from assimp invalid for this element: " +
+																  AssimpUtils::get_assimp_string(iterBone->mName));
 				}
 
 				if (skeleton) {
 					int id = skeleton->find_bone(AssimpUtils::get_assimp_string(iterBone->mName));
 					if (id != -1) {
-						print_verbose("Set bind bone: mesh: " + itos(mesh_index) + " bone index: " + itos(id));
-						Transform t = AssimpUtils::assimp_matrix_transform(iterBone->mOffsetMatrix);
-
+						//print_verbose("Set bind bone: mesh: " + itos(mesh_index) + " bone index: " + itos(id));
+						Transform t = AssimpUtils::assimp_matrix_transform(iterBone->mOffsetMatrix.Inverse());
 						skin->add_bind(bind_count, t);
-						skin->set_bind_bone(bind_count, id);
 						bind_count++;
 					}
 				}
@@ -1380,22 +1539,22 @@ EditorSceneImporterAssimp::create_mesh(ImportState &state, const aiNode *assimp_
 
 	// this code parents all meshes with bones to the armature they are for
 	// GLTF2 specification relies on this and we are enforcing it for FBX.
-	if (armature && state.flat_node_map[armature]) {
-		Node *armature_parent = state.flat_node_map[armature];
-		print_verbose("Parented mesh " + node_name + " to armature " + armature_parent->get_name());
-		// static mesh handling
-		armature_parent->add_child(mesh_node);
-		// transform must be identity
-		mesh_node->set_global_transform(Transform());
-		mesh_node->set_name(node_name);
-		mesh_node->set_owner(state.root);
-	} else {
-		// static mesh handling
-		active_node->add_child(mesh_node);
-		mesh_node->set_global_transform(node_transform);
-		mesh_node->set_name(node_name);
-		mesh_node->set_owner(state.root);
-	}
+	//	if (armature && state.flat_node_map[armature]) {
+	//        Node *armature_parent = state.flat_node_map[armature];
+	//        print_verbose("Parented mesh " + node_name + " to armature " + armature_parent->get_name());
+	//        // static mesh handling
+	//        armature_parent->add_child(mesh_node);
+	//        mesh_node->set_global_transform(Transform());
+	//
+	//        mesh_node->set_name(node_name);
+	//        mesh_node->set_owner(state.root);
+	//	} else {
+	// static mesh handling
+	active_node->add_child(mesh_node);
+	mesh_node->set_global_transform(node_transform);
+	mesh_node->set_name(node_name);
+	mesh_node->set_owner(state.root);
+	//}
 
 	if (skeleton) {
 		print_verbose("Attempted to set skeleton path!");
@@ -1407,9 +1566,9 @@ EditorSceneImporterAssimp::create_mesh(ImportState &state, const aiNode *assimp_
 }
 
 /**
- * Create a light for the scene
- * Automatically caches lights for lookup later
- */
+* Create a light for the scene
+* Automatically caches lights for lookup later
+*/
 Spatial *EditorSceneImporterAssimp::create_light(
 		ImportState &state,
 		const String &node_name,
@@ -1454,8 +1613,8 @@ Spatial *EditorSceneImporterAssimp::create_light(
 }
 
 /**
- * Create camera for the scene
- */
+* Create camera for the scene
+*/
 Spatial *EditorSceneImporterAssimp::create_camera(
 		ImportState &state,
 		const String &node_name,
@@ -1479,18 +1638,18 @@ Spatial *EditorSceneImporterAssimp::create_camera(
 }
 
 /**
- * Generate node
- * Recursive call to iterate over all nodes
- */
+* Generate node
+* Recursive call to iterate over all nodes
+*/
 void EditorSceneImporterAssimp::_generate_node(
 		ImportState &state,
 		const aiNode *assimp_node) {
 
 	ERR_FAIL_COND(assimp_node == NULL);
 	state.nodes.push_back(assimp_node);
+	String node_name = AssimpUtils::get_assimp_string(assimp_node->mName);
 	String parent_name = AssimpUtils::get_assimp_string(assimp_node->mParent->mName);
 
-	// please note
 	// duplicate bone names exist
 	// this is why we only check if the bone exists
 	// so everything else is useless but the name
