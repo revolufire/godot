@@ -1262,7 +1262,7 @@ def generate(env):
     # Used to determine if a build generates a source file. Ninja
     # requires that all generated sources are added as order_only
     # dependencies to any builds that *might* use them.
-    env["NINJA_GENERATED_SOURCE_SUFFIXES"] = ["gen.h", "glsl.gen.h", "gen.cpp", "gen.inc"]
+    env["NINJA_GENERATED_SOURCE_SUFFIXES"] = ["gen.h", "glsl.gen.h", "gen.inc"]
 
     # This is the point of no return, anything after this comment
     # makes changes to SCons that are irreversible and incompatible

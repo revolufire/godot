@@ -543,7 +543,7 @@ if selected_platform in platform_list:
         # Create ninja rule in the ninja.build
         env.NinjaRule(
             rule="SCONSBUILD",
-            command="scons CXX=echo CC=echo LINK=echo",
+            command="scons generate_sources=yes CXX=echo CC=echo LINK=touch",
         )
 
 
@@ -551,7 +551,7 @@ if selected_platform in platform_list:
             """Custom command"""
             return {
                 "outputs": [node.get_path()],
-                "rule": "SCONSBUILD",
+                "rule": "phony",
                 "implicit": [
                     str(s)  for s in node.sources
                 ],
