@@ -136,6 +136,7 @@ def get_outputs(node):
 
 class SConsToNinjaTranslator:
     """Translates SCons Actions into Ninja build objects."""
+
     def __init__(self, env):
         self.env = env
         self.func_handlers = {
@@ -199,7 +200,7 @@ class SConsToNinjaTranslator:
         name = action.function_name()
         # This is the name given by the Subst/Textfile builders. So return the
         # node to indicate that SCons is required
-        if name == "_action" or name.find("make_") != -1:
+        if name == "_action":
             return {
                 "rule": "TEMPLATE",
                 "outputs": get_outputs(node),
@@ -236,9 +237,9 @@ class SConsToNinjaTranslator:
         if not results:
             return None
 
-        # # No need to process the results if we only got a single result
-        # if len(results) == 1:
-        #     return results[0]
+        # No need to process the results if we only got a single result
+        if len(results) == 1:
+            return results[0]
 
         all_outputs = list({output for build in results for output in build["outputs"]})
         # If we have no outputs we're done
@@ -544,21 +545,18 @@ class NinjaState:
         for rule, kwargs in self.rules.items():
             ninja.rule(rule, **kwargs)
 
-        outputs = []
-        # First find builds which have header files in their outputs.
-        for build in self.builds
-            if self.has_generated_sources(build["outputs"]):
-                for output in build["outputs"]:
-                    # Collect only the header files from the builds with them
-                    # in their output. We do this because is_generated_source
-                    # returns True if it finds a header in any of the outputs,
-                    # here we need to filter so we only have the headers and
-                    # not the other outputs.
-                    if self.is_generated_source(output):
-                        outputs += output
-
         generated_source_files = {
-            outputs
+            output
+            # First find builds which have header files in their outputs.
+            for build in self.builds
+            if self.has_generated_sources(build["outputs"])
+            for output in build["outputs"]
+            # Collect only the header files from the builds with them
+            # in their output. We do this because is_generated_source
+            # returns True if it finds a header in any of the outputs,
+            # here we need to filter so we only have the headers and
+            # not the other outputs.
+            if self.is_generated_source(output)
         }
 
         if generated_source_files:
@@ -614,7 +612,24 @@ class NinjaState:
             # listed in self.rules so verify that we got a result
             # before trying to check if it has a deps key.
             if rule is not None and rule.get("deps"):
-                build["outputs"] = build["outputs"][0:1]
+
+                # Anything using deps in Ninja can only have a single
+                # output, but we may have a build which actually
+                # produces multiple outputs which other targets can
+                # depend on. Here we slice up the outputs so we have a
+                # single output which we will use for the "real"
+                # builder and multiple phony targets that match the
+                # file names of the remaining outputs. This way any
+                # build can depend on any output from any build.
+                first_output, remaining_outputs = build["outputs"][0], build["outputs"][1:]
+                if remaining_outputs:
+                    ninja.build(
+                        outputs=remaining_outputs,
+                        rule="phony",
+                        implicit=first_output,
+                    )
+
+                build["outputs"] = first_output
 
             ninja.build(**build)
 
