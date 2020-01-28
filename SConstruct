@@ -13,6 +13,9 @@ import methods
 import gles_builders
 from platform_methods import run_in_subprocess
 
+print(sys.version)
+
+
 # scan possible build platforms
 
 platform_list = []  # list of platforms
@@ -137,6 +140,8 @@ opts.Add(BoolVariable('disable_3d', "Disable 3D nodes for a smaller executable",
 opts.Add(BoolVariable('disable_advanced_gui', "Disable advanced GUI nodes and behaviors", False))
 opts.Add(BoolVariable('no_editor_splash', "Don't use the custom splash screen for the editor", False))
 opts.Add('system_certs_path', "Use this path as SSL certificates default for editor (for package maintainers)", '')
+opts.Add(BoolVariable('generate_sources', "Only generate the files we need for building (for ninja)", False))
+
 
 # Thirdparty libraries
 opts.Add(BoolVariable('builtin_bullet', "Use the built-in Bullet library", True))
@@ -495,7 +500,6 @@ if selected_platform in platform_list:
             if env['tools']:
                 print("Build option 'module_" + x + "_enabled=no' cannot be used with 'tools=yes' (editor), only with 'tools=no' (export template).")
                 sys.exit(255)
-
     if not env['verbose']:
         methods.no_verbose(sys, env)
 
@@ -524,56 +528,53 @@ if selected_platform in platform_list:
 
     SConscript("platform/" + selected_platform + "/SCsub")  # build selected platform
 
-    env["NINJA_SYNTAX"] = "#site_scons/third_party/ninja_syntax.py"
-    env.Tool("ninja")
-    ninja_builder = Tool("ninja")
-    ninja_builder.generate(env)  
-    ninja_build = env.Ninja(
-            target="build.ninja",
-            source=[
-                env_base.Alias("core-sources")
-            ],
+    if not env["generate_sources"]:            
+        env["NINJA_SYNTAX"] = "#site_scons/third_party/ninja_syntax.py"
+        env.Tool("ninja")
+        ninja_builder = Tool("ninja")
+        ninja_builder.generate(env)  
+        ninja_build = env.Ninja(
+                target="build.ninja",
+                source=[
+                    env_base.Alias("core-sources")
+                ],
+            )
+
+        # Create ninja rule in the ninja.build
+        env.NinjaRule(
+            rule="SCONSBUILD",
+            command="scons CXX=echo CC=echo LINK=echo",
         )
 
-    # import core.core_builders as core_builders
-    # import core.make_binders as make_binders
-    # command = "python core/make_certs_header.py --target core/io/certs_compressed.gen.h --source thirdparty/certs/ca-certificates.crt "
-    # if env['system_certs_path']:
-    #     command += " --system_certs_path " + env['system_certs_path']
-    # if env['builtin_certs']:
-    #     command += " --builtin_certs " + str(env['builtin_certs'])
-    # env.NinjaRule(
-    #     rule="MAKE_CERT_HEADER",
-    #     command=command,
-    # )
-    # def make_certs_header_in_ninja(env, node):
-    #     """Custom command"""
-    #     return {
-    #         "outputs": [node.get_path()],
-    #         "rule": "MAKE_CERT_HEADER",
-    #         "implicit": [
-    #             str(s)  for s in node.sources
-    #         ],
-    #     }
 
-    # env.NinjaRegisterFunctionHandler("make_certs_header", make_certs_header_in_ninja)
+        def fakelib_in_ninja(env, node):
+            """Custom command"""
+            return {
+                "outputs": [node.get_path()],
+                "rule": "SCONSBUILD",
+                "implicit": [
+                    str(s)  for s in node.sources
+                ],
+            }
 
-    # env.NinjaRegisterFunctionHandler("run", fakelib_in_ninja)
-    # env.NinjaRegisterFunctionHandler("make_app_icon", fakelib_in_ninja)
-    # env.NinjaRegisterFunctionHandler("make_splash", fakelib_in_ninja)
-    # env.NinjaRegisterFunctionHandler("make_splash_editor", fakelib_in_ninja)
-    # env.NinjaRegisterFunctionHandler("make_default_controller_mappings", fakelib_in_ninja)
-    # env.NinjaRegisterFunctionHandler("make_editor_icons_action", fakelib_in_ninja)
-    # env.NinjaRegisterFunctionHandler("make_translations_header", fakelib_in_ninja)
-    # env.NinjaRegisterFunctionHandler("build_gdnative_api_struct", fakelib_in_ninja)
-    # env.NinjaRegisterFunctionHandler("build_gles2_headers", fakelib_in_ninja)
-    # env.NinjaRegisterFunctionHandler("build_gles3_headers", fakelib_in_ninja)
-    # env.NinjaRegisterFunctionHandler("make_doc_header", fakelib_in_ninja)
-    # env.NinjaRegisterFunctionHandler("make_fonts_header", fakelib_in_ninja)
-    # env.NinjaRegisterFunctionHandler("make_authors_header", fakelib_in_ninja)
-    # env.NinjaRegisterFunctionHandler("make_donors_header", fakelib_in_ninja)
-    # env.NinjaRegisterFunctionHandler("make_license_header", fakelib_in_ninja)
-           
+        # override the functions which generate code with our own handler
+        env.NinjaRegisterFunctionHandler("make_certs_header", fakelib_in_ninja)
+        env.NinjaRegisterFunctionHandler("run", fakelib_in_ninja)
+        env.NinjaRegisterFunctionHandler("make_app_icon", fakelib_in_ninja)
+        env.NinjaRegisterFunctionHandler("make_splash", fakelib_in_ninja)
+        env.NinjaRegisterFunctionHandler("make_splash_editor", fakelib_in_ninja)
+        env.NinjaRegisterFunctionHandler("make_default_controller_mappings", fakelib_in_ninja)
+        env.NinjaRegisterFunctionHandler("make_editor_icons_action", fakelib_in_ninja)
+        env.NinjaRegisterFunctionHandler("make_translations_header", fakelib_in_ninja)
+        env.NinjaRegisterFunctionHandler("build_gdnative_api_struct", fakelib_in_ninja)
+        env.NinjaRegisterFunctionHandler("build_gles2_headers", fakelib_in_ninja)
+        env.NinjaRegisterFunctionHandler("build_gles3_headers", fakelib_in_ninja)
+        env.NinjaRegisterFunctionHandler("make_doc_header", fakelib_in_ninja)
+        env.NinjaRegisterFunctionHandler("make_fonts_header", fakelib_in_ninja)
+        env.NinjaRegisterFunctionHandler("make_authors_header", fakelib_in_ninja)
+        env.NinjaRegisterFunctionHandler("make_donors_header", fakelib_in_ninja)
+        env.NinjaRegisterFunctionHandler("make_license_header", fakelib_in_ninja)
+            
     env.Alias('core-sources', env.core_sources)
     env.Alias('core-sources', env.main_sources)
     env.Alias('core-sources', env.modules_sources)

@@ -1216,7 +1216,6 @@ def generate(env):
     """Generate the NINJA builders."""
     env[NINJA_SYNTAX] = env.get(NINJA_SYNTAX, "ninja_syntax.py")
 
-    # Add the Ninja builder.
     always_exec_ninja_action = AlwaysExecAction(ninja_builder, {})
     ninja_builder_obj = SCons.Builder.Builder(action=always_exec_ninja_action)
     env.Append(BUILDERS={"Ninja": ninja_builder_obj})
